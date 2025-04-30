@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>간단한 기계 카드 매칭 게임</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      background: linear-gradient(to right, #f2f2f2, #e0ecf8);
+    }
+
+    h1 {
+      margin-top: 20px;
+    }
+
+    #timer {
+      font-size: 18px;
+      margin: 10px 0;
+    }
+
+    #game-board {
+      display: grid;
+      grid-template-columns: repeat(6, 120px);
+      gap: 10px;
+      justify-content: center;
+      margin-top: 20px;
+    }
+
+    .card {
+      width: 110px;
+      height: 140px;
+      perspective: 1000px;
+      cursor: pointer;
+    }
+
+    .card-inner {
+      width: 100%;
+      height: 100%;
+      transition: transform 0.6s;
+      transform-style: preserve-3d;
+      position: relative;
+    }
+
+    .flipped .card-inner {
+      transform: rotateY(180deg);
+    }
+
+    .card-front, .card-back {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      backface-visibility: hidden;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+      border: 2px solid #333;
+    }
+
+    .card-front {
+      background: #fff;
+      transform: rotateY(180deg);
+      flex-direction: column;
+      padding: 5px;
+    }
+
+    .card-front img {
+      max-width: 90px;
+      max-height: 90px;
+      margin-bottom: 5px;
+    }
+
+    .card-back {
+      background: #666;
+      color: white;
+      font-size: 16px;
+    }
+
+    #restart-btn {
+      display: none;
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+  <h1>간단한 기계: 카드 뒤집기 게임</h1>
+  <div id="timer">경과 시간: 0초</div>
+  <div id="game-board"></div>
+  <button id="restart-btn" onclick="initGame()">처음부터</button>
+  <audio id="applause" src="https://upload.wikimedia.org/wikipedia/commons/6/6d/277021_sandermotions_applause-2.wav"></audio>
+
+  <script>
+    const conceptCards = [
+      { name: '지레', img: 'https://upload.wikimedia.org/wikipedia/commons/1/1a/Archimedes%27-Lever.png' },
+      { name: '빗면', img: 'https://upload.wikimedia.org/wikipedia/commons/8/8e/Inclined_Plane_%28PSF%29.png' },
+    ];
+
+    const tools = [
+      { name: '병따개', img: 'https://upload.wikimedia.org/wikipedia/commons/9/9b/Opener%2C_bottle_%28AM_2014.56.37-7%29.jpg', type: '지레' },
+      { name: '가위', img: 'https://upload.wikimedia.org/wikipedia/commons/7/76/Pair_of_scissors_with_black_handle%2C_2015-06-07.jpg', type: '지레' },
+      { name: '손톱깎이', img: 'https://upload.wikimedia.org/wikipedia/commons/0/0f/Nail_cutter_of_Salem.jpg', type: '지레' },
+      { name: '핀셋', img: 'https://upload.wikimedia.org/wikipedia/commons/a/ad/Tweezers_1.JPG', type: '지레' },
+      { name: '장도리', img: 'https://upload.wikimedia.org/wikipedia/commons/8/84/Claw-hammer.jpg', type: '지레' },
+      { name: '시소', img: 'https://upload.wikimedia.org/wikipedia/commons/b/bf/%D0%9A%D0%B0%D1%87%D0%B5%D0%BB%D0%B8_%D0%B1%D0%B0%D0%BB%D0%B0%D0%BD%D1%81%D0%B8%D1%80_%D0%B2_%D0%A1%D0%B0%D1%80%D0%B0%D1%82%D0%BE%D0%B2%D0%B5.jpg', type: '지레' },
+      { name: '젓가락', img: 'https://upload.wikimedia.org/wikipedia/commons/9/9b/Marcosticks-3D_printed_Training_chopsticks-closed_posture.png', type: '지레' },
+      { name: '삽', img: 'https://upload.wikimedia.org/wikipedia/commons/3/3a/Shovel-typeB-001.svg', type: '지레' },
+      { name: '스테이플러', img: 'https://upload.wikimedia.org/wikipedia/commons/b/b1/2017_Zszywacz_biurowy.jpg', type: '지레' },
+      { name: '경사로', img: 'https://upload.wikimedia.org/wikipedia/commons/d/df/Seaside_Momochi_Seaside_Park_pedestrian_deck_wheelchair_ramp_902-1_Momochi-hama_2-ch%C5%8Dme_Sawara-ku_Fukuoka_20230106.jpg', type: '빗면' },
+      { name: '사다리차', img: 'https://upload.wikimedia.org/wikipedia/commons/e/eb/Lafd_ladder_truck.jpg', type: '빗면' },
+      { name: '나사못', img: 'https://upload.wikimedia.org/wikipedia/commons/8/85/Black_wood_screw_with_flat_Phillips_head.jpg', type: '빗면' },
+      { name: '산길', img: 'https://upload.wikimedia.org/wikipedia/commons/8/84/20230710_forest_road_Kokociniec-Batory_Katowice_Poland.jpg', type: '빗면' },
+      { name: '미끄럼틀', img: 'https://upload.wikimedia.org/wikipedia/commons/7/7d/Playground_Slide_Metal.jpg', type: '빗면' },
+      { name: '병뚜껑', img: 'https://upload.wikimedia.org/wikipedia/commons/4/42/Recycle_bottle_cap.jpg', type: '빗면' }
+    ];
+
+    let cards = [];
+    let flipped = [];
+    let matched = 0;
+    let startTime, timerInterval;
+
+    function shuffle(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+    }
+
+    function createCard({ name, img, type }, role) {
+      const div = document.createElement('div');
+      div.className = 'card';
+      div.dataset.name = name;
+      div.dataset.type = type || name;
+      div.dataset.role = role;
+
+      const inner = document.createElement('div');
+      inner.className = 'card-inner';
+
+      const front = document.createElement('div');
+      front.className = 'card-front';
+      const image = document.createElement('img');
+      image.src = img;
+      const label = document.createElement('div');
+      label.textContent = name;
+      front.appendChild(image);
+      front.appendChild(label);
+
+      const back = document.createElement('div');
+      back.className = 'card-back';
+      back.textContent = '카드';
+
+      inner.appendChild(front);
+      inner.appendChild(back);
+      div.appendChild(inner);
+
+      div.addEventListener('click', () => flipCard(div));
+      return div;
+    }
+
+    function flipCard(card) {
+      if (flipped.includes(card) || card.classList.contains('matched') || flipped.length >= 2) return;
+      card.classList.add('flipped');
+      flipped.push(card);
+
+      if (flipped.length === 2) {
+        const [a, b] = flipped;
+        const match = (a.dataset.type === b.dataset.type) &&
+                      (a.dataset.role !== b.dataset.role);
+        if (match) {
+          a.classList.add('matched');
+          b.classList.add('matched');
+          matched += 2;
+          flipped = [];
+          if (matched === cards.length) {
+            clearInterval(timerInterval);
+            document.getElementById('applause').play();
+            document.getElementById('restart-btn').style.display = 'inline-block';
+          }
+        } else {
+          setTimeout(() => {
+            a.classList.remove('flipped');
+            b.classList.remove('flipped');
+            flipped = [];
+          }, 1000);
+        }
+      }
+    }
+
+    function updateTimer() {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      document.getElementById('timer').textContent = `경과 시간: ${elapsed}초`;
+    }
+
+    function initGame() {
+      const board = document.getElementById('game-board');
+      board.innerHTML = '';
+      document.getElementById('restart-btn').style.display = 'none';
+      matched = 0;
+      flipped = [];
+
+      const pairCards = tools.map(tool => [
+        createCard(conceptCards.find(c => c.name === tool.type), '개념'),
+        createCard(tool, '도구')
+      ]).flat();
+
+      cards = [...pairCards];
+      shuffle(cards);
+      cards.forEach(card => board.appendChild(card));
+
+      startTime = Date.now();
+      clearInterval(timerInterval);
+      updateTimer();
+      timerInterval = setInterval(updateTimer, 1000);
+    }
+
+    window.onload = initGame;
+  </script>
+</body>
+</html>
