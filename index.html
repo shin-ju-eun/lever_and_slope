@@ -8,10 +8,12 @@
       font-family: Arial, sans-serif;
       text-align: center;
       background: linear-gradient(to right, #f2f2f2, #e0ecf8);
+      margin: 0;
+      padding: 20px;
     }
 
     h1 {
-      margin-top: 20px;
+      margin-top: 0;
     }
 
     #timer {
@@ -21,7 +23,7 @@
 
     #game-board {
       display: grid;
-      grid-template-columns: repeat(6, 120px);
+      grid-template-columns: repeat(6, 120px); /* 카드 개수에 따라 조절 가능 */
       gap: 10px;
       justify-content: center;
       margin-top: 20px;
@@ -67,8 +69,8 @@
     }
 
     .card-front img {
-      max-width: 90px;
-      max-height: 90px;
+      max-width: 90px; /* 이미지 크기 조절 */
+      max-height: 70px; /* 이미지 크기 조절 */
       margin-bottom: 5px;
     }
 
@@ -79,21 +81,67 @@
     }
 
     #restart-btn {
-      display: none;
+      /* display: none; */ /* 초기에는 숨기지 않고, 게임 완료 후 initGame 호출 시 숨김 처리 */
       margin-top: 20px;
       padding: 10px 20px;
       font-size: 16px;
+      cursor: pointer;
+    }
+
+    #intro-screen {
+      margin-top: 50px;
+    }
+
+    #intro-screen input {
+      padding: 10px;
+      font-size: 16px;
+      margin-right: 10px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+    }
+
+    #intro-screen button {
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      border-radius: 5px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+    }
+
+    #game-container {
+      display: none; /* 초기에는 게임 화면 숨김 */
+    }
+    #loading-message {
+      display: none;
+      margin-top: 20px;
+      font-size: 16px;
+      color: #333;
     }
   </style>
 </head>
 <body>
   <h1>간단한 기계: 카드 뒤집기 게임</h1>
-  <div id="timer">경과 시간: 0초</div>
-  <div id="game-board"></div>
-  <button id="restart-btn" onclick="initGame()">처음부터</button>
+
+  <div id="intro-screen">
+    <input type="text" id="player-name" placeholder="이름을 입력하세요">
+    <button id="start-game-btn">게임 시작</button>
+  </div>
+
+  <div id="game-container">
+    <div id="timer">경과 시간: 0초</div>
+    <div id="game-board"></div>
+    <button id="restart-btn" onclick="startGame()">처음부터 (기록됨)</button> </div>
+  <div id="loading-message">결과를 저장 중입니다...</div>
+
+
   <audio id="applause" src="https://upload.wikimedia.org/wikipedia/commons/6/6d/277021_sandermotions_applause-2.wav"></audio>
 
   <script>
+    // 여기에 2단계에서 복사한 Apps Script 웹 앱 URL을 입력하세요.
+    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxh5sB2Jk9Z4MaOQxhoNAeIEz_3NNgnfLeEUmlhBXc2HLNdvUICNpHE_9peV6NIFhrlqA/exec';
+
     const conceptCards = [
       { name: '지레', img: 'https://upload.wikimedia.org/wikipedia/commons/1/1a/Archimedes%27-Lever.png' },
       { name: '빗면', img: 'https://upload.wikimedia.org/wikipedia/commons/8/8e/Inclined_Plane_%28PSF%29.png' },
@@ -121,6 +169,16 @@
     let flipped = [];
     let matched = 0;
     let startTime, timerInterval;
+    let currentPlayerName = '';
+    let timeElapsedInSeconds = 0; // 경과 시간 저장 변수
+
+    const introScreen = document.getElementById('intro-screen');
+    const gameContainer = document.getElementById('game-container');
+    const playerNameInput = document.getElementById('player-name');
+    const startGameBtn = document.getElementById('start-game-btn');
+    const restartBtn = document.getElementById('restart-btn');
+    const loadingMessage = document.getElementById('loading-message');
+
 
     function shuffle(arr) {
       for (let i = arr.length - 1; i > 0; i--) {
@@ -133,8 +191,8 @@
       const div = document.createElement('div');
       div.className = 'card';
       div.dataset.name = name;
-      div.dataset.type = type || name;
-      div.dataset.role = role;
+      div.dataset.type = type || name; // 개념 카드는 type이 없으므로 name을 사용
+      div.dataset.role = role; // '개념' 또는 '도구'
 
       const inner = document.createElement('div');
       inner.className = 'card-inner';
@@ -143,6 +201,7 @@
       front.className = 'card-front';
       const image = document.createElement('img');
       image.src = img;
+      image.alt = name; // alt 속성 추가
       const label = document.createElement('div');
       label.textContent = name;
       front.appendChild(image);
@@ -150,7 +209,7 @@
 
       const back = document.createElement('div');
       back.className = 'card-back';
-      back.textContent = '카드';
+      back.textContent = '카드'; // 또는 '뒤집기' 등
 
       inner.appendChild(front);
       inner.appendChild(back);
@@ -167,8 +226,9 @@
 
       if (flipped.length === 2) {
         const [a, b] = flipped;
-        const match = (a.dataset.type === b.dataset.type) &&
-                      (a.dataset.role !== b.dataset.role);
+        // dataset.type (개념이름 또는 도구의 type)이 같고, dataset.role ('개념', '도구')이 달라야 매칭 성공
+        const match = (a.dataset.type === b.dataset.type) && (a.dataset.role !== b.dataset.role);
+
         if (match) {
           a.classList.add('matched');
           b.classList.add('matched');
@@ -177,7 +237,8 @@
           if (matched === cards.length) {
             clearInterval(timerInterval);
             document.getElementById('applause').play();
-            document.getElementById('restart-btn').style.display = 'inline-block';
+            // restartBtn.style.display = 'inline-block'; // 게임 완료 시 바로 재시작 버튼 표시
+            saveResult(); // 게임 완료 시 결과 저장 함수 호출
           }
         } else {
           setTimeout(() => {
@@ -189,34 +250,149 @@
       }
     }
 
+    async function saveResult() {
+      loadingMessage.style.display = 'block'; // 로딩 메시지 표시
+      restartBtn.style.display = 'none'; // 저장 중에는 재시작 버튼 숨김
+
+      const data = {
+        name: currentPlayerName,
+        time: timeElapsedInSeconds
+      };
+
+      try {
+        const response = await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          mode: 'no-cors', // Google Apps Script는 기본적으로 CORS를 허용하지 않으므로, no-cors 모드로 보내거나 Apps Script에서 CORS 헤더를 설정해야 합니다.
+                          // no-cors 모드에서는 응답 내용을 직접 읽을 수 없지만, 요청은 정상적으로 전송됩니다.
+                          // 또는 Apps Script의 doPost에서 ContentService.createTextOutput().addHeader("Access-Control-Allow-Origin", "*") 등으로 설정할 수 있으나,
+                          // doPost는 일반적으로 HTML을 반환하지 않으므로 no-cors로도 충분합니다. 여기서는 Apps Script가 JSON 응답을 하도록 수정했으므로,
+                          // mode: 'cors'로 하고 Apps Script에서 CORS 헤더를 추가하는 것이 더 정석적입니다.
+                          // 하지만 간단한 구현을 위해 no-cors를 사용하고, Apps Script는 응답을 하되 클라이언트가 읽지 못하는 상태로 둡니다.
+                          // 더 나은 방법은 Apps Script를 JSONP나 प्रॉपर CORS 설정으로 하는 것입니다.
+                          // 여기서는 Google Apps Script doPost가 ContentService를 통해 JSON 응답을 하므로, mode: 'cors'는 필요 없습니다.
+                          // 직접 redirect 후 파라미터로 데이터를 넘기는 방식이 아니라면 fetch의 응답을 직접 쓰지 않으므로 아래와 같이 처리.
+          
+          // Google Apps Script로 POST 요청 시 redirect를 따르도록 하고, content-type을 명시해야 할 수 있습니다.
+          // 그러나 Apps Script doPost는 보통 text/plain 이나 application/json을 받습니다.
+          // 단순화를 위해 아래와 같이 body만 JSON 문자열로 보냅니다.
+          redirect: "follow", // Apps Script doPost는 redirect를 통해 결과를 반환할 수 있음
+          headers: {
+             // 'Content-Type': 'application/json' // ContentService.createTextOutput().setMimeType(ContentService.MimeType.JSON)를 Apps Script에 사용했으므로,
+                                               // application/json으로 보내는 것이 적절하나, 일반적인 웹앱 배포 시
+                                               // 'Content-Type': 'application/x-www-form-urlencoded' 또는 'text/plain' 을 기대하기도 합니다.
+                                               // e.postData.contents는 문자열이므로, JSON.stringify한 것을 그대로 보냅니다.
+                                               // Apps Script에서 JSON.parse(e.postData.contents) 로 처리합니다.
+          },
+          body: JSON.stringify(data) // 데이터를 JSON 문자열로 변환하여 전송
+        });
+        
+        // no-cors 모드에서는 response.ok나 response.json() 등을 사용할 수 없습니다.
+        // 요청이 성공적으로 보내졌다고 가정합니다.
+        console.log('결과 전송 시도 완료.');
+        alert(`${currentPlayerName}님의 기록 ${timeElapsedInSeconds}초가 저장되었습니다!`);
+
+      } catch (error) {
+        console.error('결과 저장 중 오류 발생:', error);
+        alert('결과 저장 중 오류가 발생했습니다. 인터넷 연결을 확인하거나 나중에 다시 시도해 주세요.');
+      } finally {
+        loadingMessage.style.display = 'none'; // 로딩 메시지 숨김
+        restartBtn.style.display = 'inline-block'; // 재시작 버튼 다시 표시
+      }
+    }
+
+
     function updateTimer() {
-      const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      document.getElementById('timer').textContent = `경과 시간: ${elapsed}초`;
+      timeElapsedInSeconds = Math.floor((Date.now() - startTime) / 1000);
+      document.getElementById('timer').textContent = `경과 시간: ${timeElapsedInSeconds}초`;
     }
 
     function initGame() {
       const board = document.getElementById('game-board');
-      board.innerHTML = '';
-      document.getElementById('restart-btn').style.display = 'none';
+      board.innerHTML = ''; // 이전 게임 보드 내용 삭제
+      // restartBtn.style.display = 'none'; // 게임 시작 시 재시작 버튼 숨김
       matched = 0;
       flipped = [];
+      cards = []; // cards 배열 초기화
 
-      const pairCards = tools.map(tool => [
-        createCard(conceptCards.find(c => c.name === tool.type), '개념'),
-        createCard(tool, '도구')
-      ]).flat();
+      // 6쌍의 카드 (총 12장)를 만들기 위해 도구 선택
+      // 모든 도구를 사용하면 15쌍(30장)이 되므로, 일부만 선택하거나, grid-template-columns 조절 필요
+      // 여기서는 tools 배열의 처음 5개 도구와 그에 맞는 개념카드 1개 (총 6쌍, 12개 카드)를 사용합니다.
+      // 또는 모든 카드를 사용하고 grid-template-columns: repeat(5, 120px); 등으로 조절할 수 있습니다.
+      // 현재 repeat(6, 120px)이므로 30장까지 가능 (6x5 레이아웃)
+      
+      let selectedTools = [...tools]; // 모든 도구 사용
+      // 만약 카드 수를 제한하고 싶다면 아래처럼 slice 사용
+      // const numberOfPairs = 6; // 예: 6쌍 (12 카드)
+      // let selectedTools = tools.slice(0, numberOfPairs);
+
+
+      const pairCards = selectedTools.map(tool => {
+        const conceptCardData = conceptCards.find(c => c.name === tool.type);
+        if (!conceptCardData) {
+          console.error(`도구 '${tool.name}'에 대한 개념 카드(${tool.type})를 찾을 수 없습니다.`);
+          return []; // 오류 발생 시 빈 배열 반환 또는 다른 처리
+        }
+        return [
+          createCard(conceptCardData, '개념'), // 개념 카드
+          createCard(tool, '도구')             // 도구 카드
+        ];
+      }).flat(); // [[c1, t1], [c2, t2]] -> [c1, t1, c2, t2]
 
       cards = [...pairCards];
       shuffle(cards);
       cards.forEach(card => board.appendChild(card));
 
       startTime = Date.now();
-      clearInterval(timerInterval);
-      updateTimer();
+      clearInterval(timerInterval); // 이전 타이머가 있다면 중지
+      updateTimer(); // 타이머 즉시 0초로 업데이트
       timerInterval = setInterval(updateTimer, 1000);
+
+      // 게임 시작 시 재시작 버튼은 결과 저장 후 나타나도록 변경
+      restartBtn.style.display = 'none';
+      loadingMessage.style.display = 'none';
     }
 
-    window.onload = initGame;
+    function startGameFlow() {
+        currentPlayerName = playerNameInput.value.trim();
+        if (!currentPlayerName) {
+            alert('이름을 입력해주세요!');
+            playerNameInput.focus();
+            return;
+        }
+
+        introScreen.style.display = 'none';
+        gameContainer.style.display = 'block';
+        initGame();
+    }
+    
+    // '처음부터' 버튼 클릭 시 (이미 게임을 한 후)
+    restartBtn.onclick = () => {
+        // 옵션1: 이름 입력 화면으로 돌아가기
+        gameContainer.style.display = 'none';
+        introScreen.style.display = 'block';
+        playerNameInput.value = ''; // 이전 이름 지우기 (선택 사항)
+        playerNameInput.focus();
+        // 옵션2: 현재 이름으로 바로 재시작 (이 경우 startGameBtn 리스너와 유사하게 처리)
+        // startGameFlow(); // 이렇게 하면 이름 입력 없이 바로 재시작
+    };
+
+
+    startGameBtn.addEventListener('click', startGameFlow);
+    
+    playerNameInput.addEventListener('keypress', function(event) {
+        if (event.key === 'Enter') {
+            startGameFlow();
+        }
+    });
+
+    // 페이지 로드 시 초기 상태 설정
+    window.onload = () => {
+      introScreen.style.display = 'block';
+      gameContainer.style.display = 'none';
+      restartBtn.style.display = 'none'; // 초기에는 재시작 버튼 숨김
+      playerNameInput.focus();
+    };
+
   </script>
 </body>
 </html>
